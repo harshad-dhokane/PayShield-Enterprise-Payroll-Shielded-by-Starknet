@@ -18,7 +18,7 @@
     "@supabase/supabase-js": "^2.103.0",
     "@types/crypto-js": "^4.2.2",
     "crypto-js": "^4.2.0",
-    "ethers": "^5.7.2",
+    "ethers": "^6.16.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.8.0",
     "next": "14.2.35",
@@ -44,5 +44,16 @@
   },
   "engines": {
     "node": "^20"
+  },
+  "overrides": {
+    "@hyperlane-xyz/sdk": {
+      "ethers": "5.7.2"
+    },
+    "@hyperlane-xyz/utils": {
+      "ethers": "5.7.2"
+    },
+    "@hyperlane-xyz/core": {
+      "ethers": "5.7.2"
+    }
   }
 }
