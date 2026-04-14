@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import CryptoJS from "crypto-js";
 import type { TypedData } from "starknet";
 import {
@@ -48,6 +48,7 @@ interface WalletContextType {
   network: string;
   isConnecting: boolean;
   isSigningLMK: boolean;
+  isRestoringSession: boolean;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -61,6 +62,7 @@ const WalletContext = createContext<WalletContextType>({
   network: getActiveNetworkName(),
   isConnecting: false,
   isSigningLMK: false,
+  isRestoringSession: false,
   connect: async () => {},
   disconnect: async () => {},
 });
@@ -76,7 +78,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [localMasterKey, setLocalMasterKey] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigningLMK, setIsSigningLMK] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const lmkGeneratedFor = useRef<string | null>(null);
+  const hasAttemptedRestore = useRef(false);
 
   // Derive the Local Master Key from a signature
   const generateLMK = useCallback(async (connectedWallet: StarkZapWallet) => {
@@ -121,6 +125,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   // Connect wallet via Cartridge Controller
   const connect = useCallback(async () => {
+    if (isConnecting) {
+      return;
+    }
+
     try {
       setIsConnecting(true);
       const result = await sdkRef.current.onboard(createCartridgeOnboardOptions());
@@ -138,7 +146,45 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [generateLMK]);
+  }, [generateLMK, isConnecting]);
+
+  useEffect(() => {
+    if (hasAttemptedRestore.current) {
+      return;
+    }
+
+    hasAttemptedRestore.current = true;
+
+    if (typeof window === "undefined") {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    const hasStoredSession =
+      Boolean(window.localStorage.getItem("session")) &&
+      Boolean(window.localStorage.getItem("sessionSigner"));
+
+    if (!hasStoredSession) {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    void (async () => {
+      try {
+        await connect();
+      } catch (error) {
+        console.error("[StarkZap] Session restore failed:", error);
+      } finally {
+        setIsRestoringSession(false);
+      }
+    })();
+  }, [connect]);
+
+  useEffect(() => {
+    if (wallet || localMasterKey) {
+      setIsRestoringSession(false);
+    }
+  }, [wallet, localMasterKey]);
 
   // Disconnect wallet
   const disconnect = useCallback(async () => {
@@ -163,6 +209,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         network: getActiveNetworkName(),
         isConnecting,
         isSigningLMK,
+        isRestoringSession,
         connect,
         disconnect,
       }}

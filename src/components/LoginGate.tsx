@@ -4,7 +4,7 @@ import { useWallet } from "@/context/WalletContext";
 import { Shield, Zap, Loader2 } from "lucide-react";
 
 export default function LoginGate({ children }: { children: React.ReactNode }) {
-  const { wallet, localMasterKey, isConnecting, isSigningLMK, connect } =
+  const { wallet, localMasterKey, isConnecting, isSigningLMK, isRestoringSession, connect } =
     useWallet();
 
   // If connected and LMK is ready, render the app
@@ -40,20 +40,26 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
           </div>
 
           <h2 className="text-xl font-bold font-headline text-center mb-2">
-            {isSigningLMK ? "Generating Privacy Key" : "Shielded Access"}
+            {isRestoringSession
+              ? "Restoring Session"
+              : isSigningLMK
+                ? "Generating Privacy Key"
+                : "Shielded Access"}
           </h2>
 
           <p className="text-sm text-on-surface-variant text-center mb-8 leading-relaxed">
-            {isSigningLMK
+            {isRestoringSession
+              ? "Reconnecting your Cartridge session and decrypting your payroll workspace."
+              : isSigningLMK
               ? "Please sign the message to generate your Local Master Key. This key encrypts your payroll data locally."
               : "Connect your Cartridge Controller wallet to access the privacy-first payroll dashboard."}
           </p>
 
-          {isSigningLMK ? (
+          {isRestoringSession || isSigningLMK ? (
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="w-6 h-6 text-primary-container animate-spin" />
               <p className="text-xs text-on-surface-variant/60 uppercase tracking-widest">
-                Awaiting signature...
+                {isRestoringSession ? "Reconnecting..." : "Awaiting signature..."}
               </p>
             </div>
           ) : (
