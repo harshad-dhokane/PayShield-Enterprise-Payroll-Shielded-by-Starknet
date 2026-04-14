@@ -76,6 +76,15 @@ function toAmountUnitString(baseAmount: bigint, token: Token): string {
   return Amount.fromRaw(baseAmount, token).toUnit();
 }
 
+async function confidentialToPublicUnitString(
+  confidential: TongoConfidential,
+  confidentialAmount: bigint,
+  token: Token
+): Promise<string> {
+  const publicBaseAmount = await confidential.toPublicUnits(confidentialAmount);
+  return toAmountUnitString(publicBaseAmount, token);
+}
+
 function sumAmounts(amounts: Amount[]): Amount {
   if (amounts.length === 0) {
     const payrollToken = getConfidentialPayrollToken();
@@ -268,8 +277,8 @@ export async function getCompanyConfidentialState(wallet: WalletInterface, lmk: 
   const state = await confidential.getState();
 
   return {
-    balance: toAmountUnitString(state.balance, payrollToken),
-    pending: toAmountUnitString(state.pending, payrollToken),
+    balance: await confidentialToPublicUnitString(confidential, state.balance, payrollToken),
+    pending: await confidentialToPublicUnitString(confidential, state.pending, payrollToken),
     nonce: state.nonce.toString(),
   };
 }
@@ -300,32 +309,38 @@ export async function preparePayrollExecution(
   }
 
   const payrollAmounts = items.map((item) => Amount.parse(item.amount, payrollToken));
+  const confidentialAmounts = await Promise.all(
+    payrollAmounts.map((amount) => confidential.toConfidentialUnits(amount))
+  );
   const totalAmount = sumAmounts(payrollAmounts);
-  const availableBalance = confidentialState.balance + confidentialState.pending;
+  const totalConfidentialAmount = confidentialAmounts.reduce((sum, amount) => sum + amount, 0n);
+  const availableConfidentialBalance = confidentialState.balance + confidentialState.pending;
   const fundAmountBase =
-    totalAmount.toBase() > availableBalance ? totalAmount.toBase() - availableBalance : 0n;
+    totalConfidentialAmount > availableConfidentialBalance
+      ? totalConfidentialAmount - availableConfidentialBalance
+      : 0n;
 
   if (fundAmountBase > 0n) {
     builder.confidentialFund(confidential, {
-      amount: Amount.fromRaw(fundAmountBase, payrollToken),
+      amount: Amount.fromRaw(fundAmountBase, 0, payrollToken.symbol),
       sender: wallet.address,
     });
   }
 
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     builder.confidentialTransfer(confidential, {
-      amount: Amount.parse(item.amount, payrollToken),
+      amount: Amount.fromRaw(confidentialAmounts[index], 0, payrollToken.symbol),
       to: deserializeRecipient(item.tongoRecipient),
       sender: wallet.address,
     });
   }
 
   const sweepRemainderToTreasury = options?.sweepRemainderToTreasury ?? true;
-  const sweepAmountBase = availableBalance + fundAmountBase - totalAmount.toBase();
+  const sweepAmountBase = availableConfidentialBalance + fundAmountBase - totalConfidentialAmount;
 
   if (sweepRemainderToTreasury && sweepAmountBase > 0n) {
     builder.confidentialWithdraw(confidential, {
-      amount: Amount.fromRaw(sweepAmountBase, payrollToken),
+      amount: Amount.fromRaw(sweepAmountBase, 0, payrollToken.symbol),
       to: wallet.address,
       sender: wallet.address,
     });
@@ -347,12 +362,24 @@ export async function preparePayrollExecution(
       feeEstimate,
       payrollTokenSymbol: payrollToken.symbol,
       totalAmount: totalAmount.toUnit(),
-      fundAmount: toAmountUnitString(fundAmountBase, payrollToken),
-      sweepAmount: toAmountUnitString(sweepAmountBase > 0n ? sweepAmountBase : 0n, payrollToken),
+      fundAmount: await confidentialToPublicUnitString(confidential, fundAmountBase, payrollToken),
+      sweepAmount: await confidentialToPublicUnitString(
+        confidential,
+        sweepAmountBase > 0n ? sweepAmountBase : 0n,
+        payrollToken
+      ),
       companyConfidentialAddress: profile.address,
       companyRecipient: profile.recipient,
-      confidentialBalanceBefore: toAmountUnitString(confidentialState.balance, payrollToken),
-      confidentialPendingBefore: toAmountUnitString(confidentialState.pending, payrollToken),
+      confidentialBalanceBefore: await confidentialToPublicUnitString(
+        confidential,
+        confidentialState.balance,
+        payrollToken
+      ),
+      confidentialPendingBefore: await confidentialToPublicUnitString(
+        confidential,
+        confidentialState.pending,
+        payrollToken
+      ),
     },
   };
 }
