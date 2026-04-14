@@ -11,6 +11,10 @@ import {
   type StarkZapWallet,
 } from "@/lib/starkzap-sdk";
 
+function getLmkStorageKey(address: string) {
+  return `starkzap:lmk:${address.toLowerCase()}`;
+}
+
 // ── Typed data for signature request ──
 function getShieldedPayrollTypedData(): TypedData {
   return {
@@ -78,6 +82,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const generateLMK = useCallback(async (connectedWallet: StarkZapWallet) => {
     if (lmkGeneratedFor.current === connectedWallet.address) return;
     try {
+      if (typeof window !== "undefined") {
+        const cached = window.localStorage.getItem(getLmkStorageKey(connectedWallet.address));
+        if (cached) {
+          setLocalMasterKey(cached);
+          lmkGeneratedFor.current = connectedWallet.address;
+          return;
+        }
+      }
+
       setIsSigningLMK(true);
       // Request one-time signature for "Access Shielded Payroll"
       const signature = await connectedWallet.signMessage(getShieldedPayrollTypedData());
@@ -94,8 +107,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       const lmk = CryptoJS.SHA256(`${connectedWallet.address}:${sigString}`).toString();
       setLocalMasterKey(lmk);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(getLmkStorageKey(connectedWallet.address), lmk);
+      }
       lmkGeneratedFor.current = connectedWallet.address;
-      console.log("[StarkZap] LMK generated (in-memory only, never persisted)");
+      console.log("[StarkZap] LMK generated and cached locally for this wallet");
     } catch (err) {
       console.error("[StarkZap] LMK signature rejected or failed:", err);
     } finally {
