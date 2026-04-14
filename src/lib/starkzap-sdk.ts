@@ -39,12 +39,27 @@ const EXPLORER_CONFIG: ExplorerConfig = {
   provider: "voyager",
 };
 
-const DEFAULT_TONGO_CONTRACTS: Record<StarkZapNetworkName, string> = {
-  mainnet:
-    "0x0415f2c3b16cc43856a0434ed151888a5797b6a22492ea6fd41c62dbb4df4e6c",
-  sepolia:
-    "0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585",
-};
+const DEFAULT_TONGO_CONTRACTS_BY_TOKEN_ADDRESS: Record<StarkZapNetworkName, Record<string, string>> =
+  {
+    mainnet: {
+      [mainnetTokens.STRK.address.toLowerCase()]:
+        "0x03a542d7eb73b3e33a2c54e9827ec17a6365e289ec35ccc94dde97950d9db498",
+      [mainnetTokens.ETH.address.toLowerCase()]:
+        "0x0276e11a5428f6de18a38b7abc1d60abc75ce20aa3a925e20a393fcec9104f89",
+      [mainnetTokens.USDC_E.address.toLowerCase()]:
+        "0x072098b84989a45cc00697431dfba300f1f5d144ae916e98287418af4e548d96",
+      [mainnetTokens.USDC.address.toLowerCase()]:
+        "0x026f79017c3c382148832c6ae50c22502e66f7a2f81ccbdb9e1377af31859d3a",
+    },
+    sepolia: {
+      [sepoliaTokens.STRK.address.toLowerCase()]:
+        "0x0408163bfcfc2d76f34b444cb55e09dace5905cf84c0884e4637c2c0f06ab6ed",
+      [sepoliaTokens.ETH.address.toLowerCase()]:
+        "0x02cf0dc1d9e8c7731353dd15e6f2f22140120ef2d27116b982fa4fed87f6fef5",
+      [sepoliaTokens.USDC_E.address.toLowerCase()]:
+        "0x02caae365e67921979a4e5c16dd70eaa5776cfc6a9592bcb903d91933aaf2552",
+    },
+  };
 
 const DEFAULT_CONFIDENTIAL_TOKEN_SYMBOLS: Record<StarkZapNetworkName, string> = {
   mainnet: "USDC",
@@ -92,6 +107,18 @@ function getConfiguredTokenSymbol(): string {
   return (
     process.env.NEXT_PUBLIC_TONGO_PAYROLL_TOKEN_SYMBOL?.trim() ||
     DEFAULT_CONFIDENTIAL_TOKEN_SYMBOLS[getConfiguredNetwork()]
+  );
+}
+
+function getDefaultTongoContractForConfiguredToken(): string | null {
+  const token = getConfidentialPayrollToken();
+  if (!token) {
+    return null;
+  }
+
+  return (
+    DEFAULT_TONGO_CONTRACTS_BY_TOKEN_ADDRESS[getConfiguredNetwork()][token.address.toLowerCase()] ??
+    null
   );
 }
 
@@ -266,7 +293,7 @@ export function getActiveNetworkName() {
 }
 
 export function getConfiguredTongoContract() {
-  return process.env.NEXT_PUBLIC_TONGO_CONTRACT?.trim() || DEFAULT_TONGO_CONTRACTS[getConfiguredNetwork()];
+  return process.env.NEXT_PUBLIC_TONGO_CONTRACT?.trim() || getDefaultTongoContractForConfiguredToken();
 }
 
 export function getConfidentialPayrollToken(): Token | null {
