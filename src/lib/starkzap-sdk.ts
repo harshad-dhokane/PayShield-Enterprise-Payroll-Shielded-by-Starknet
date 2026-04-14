@@ -122,7 +122,7 @@ function dedupePolicies(policies: CartridgePolicy[]): CartridgePolicy[] {
   });
 }
 
-function readConfiguredPolicies(): CartridgePolicy[] {
+export function readConfiguredPolicies(): CartridgePolicy[] {
   const policies: CartridgePolicy[] = [];
   const tongoContract = getConfiguredTongoContract();
   const payrollToken = getConfidentialPayrollToken();
