@@ -181,7 +181,7 @@ async function assertConfiguredTongoToken(
   const configuredContract = getConfiguredTongoContract();
 
   const wrappedTokenAddress = normalizeStarknetAddress(await tongoAccount.Tongo.ERC20());
-  const expectedTokenAddress = payrollToken.address.toLowerCase();
+  const expectedTokenAddress = normalizeStarknetAddress(payrollToken.address);
 
   if (wrappedTokenAddress !== expectedTokenAddress) {
     throw new Error(
