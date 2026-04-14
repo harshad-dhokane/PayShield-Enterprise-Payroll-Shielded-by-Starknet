@@ -98,6 +98,36 @@ function sumAmounts(amounts: Amount[]): Amount {
   return amounts.slice(1).reduce((total, amount) => total.add(amount), amounts[0]);
 }
 
+async function executeCalls(
+  wallet: WalletInterface,
+  calls: Call[]
+): Promise<{
+  txHash: string;
+  explorerUrl: string;
+  feeMode: FeeMode;
+  feeEstimate: EstimateFeeResponseOverhead;
+  preflight: PreflightResult;
+  receipt: Record<string, unknown>;
+}> {
+  const { feeMode, feeEstimate, preflight } = await resolveExecutionMode(wallet, calls);
+  const tx = await wallet.execute(calls, { feeMode });
+
+  await tx.wait({
+    successStates: [TransactionFinalityStatus.ACCEPTED_ON_L2],
+  });
+
+  const receipt = await tx.receipt();
+
+  return {
+    txHash: tx.hash,
+    explorerUrl: tx.explorerUrl,
+    feeMode,
+    feeEstimate,
+    preflight,
+    receipt: receipt as Record<string, unknown>,
+  };
+}
+
 async function resolveExecutionMode(
   wallet: WalletInterface,
   calls: Call[]
@@ -301,12 +331,6 @@ export async function preparePayrollExecution(
   const confidential = createCompanyConfidential(wallet, lmk);
   const confidentialState = await confidential.getState();
   const profile = getCompanyConfidentialProfile(wallet, lmk);
-  const builder = wallet.tx();
-
-  if (confidentialState.pending > 0n) {
-    const rolloverCalls = await confidential.rollover({ sender: wallet.address });
-    builder.add(...rolloverCalls);
-  }
 
   const payrollAmounts = items.map((item) => Amount.parse(item.amount, payrollToken));
   const confidentialAmounts = await Promise.all(
@@ -314,40 +338,34 @@ export async function preparePayrollExecution(
   );
   const totalAmount = sumAmounts(payrollAmounts);
   const totalConfidentialAmount = confidentialAmounts.reduce((sum, amount) => sum + amount, 0n);
-  const availableConfidentialBalance = confidentialState.balance + confidentialState.pending;
+  const availableConfidentialBalance = confidentialState.balance;
   const fundAmountBase =
     totalConfidentialAmount > availableConfidentialBalance
       ? totalConfidentialAmount - availableConfidentialBalance
       : 0n;
 
-  if (fundAmountBase > 0n) {
-    builder.confidentialFund(confidential, {
+  let calls: Call[];
+  if (confidentialState.pending > 0n) {
+    calls = await confidential.rollover({ sender: wallet.address });
+  } else if (fundAmountBase > 0n) {
+    calls = await confidential.fund({
       amount: Amount.fromRaw(fundAmountBase, 0, payrollToken.symbol),
       sender: wallet.address,
     });
-  }
-
-  for (const [index, item] of items.entries()) {
-    builder.confidentialTransfer(confidential, {
-      amount: Amount.fromRaw(confidentialAmounts[index], 0, payrollToken.symbol),
-      to: deserializeRecipient(item.tongoRecipient),
+  } else {
+    calls = await confidential.transfer({
+      amount: Amount.fromRaw(confidentialAmounts[0], 0, payrollToken.symbol),
+      to: deserializeRecipient(items[0].tongoRecipient),
       sender: wallet.address,
     });
   }
 
-  const sweepRemainderToTreasury = options?.sweepRemainderToTreasury ?? true;
-  const sweepAmountBase = availableConfidentialBalance + fundAmountBase - totalConfidentialAmount;
-
-  if (sweepRemainderToTreasury && sweepAmountBase > 0n) {
-    builder.confidentialWithdraw(confidential, {
-      amount: Amount.fromRaw(sweepAmountBase, 0, payrollToken.symbol),
-      to: wallet.address,
-      sender: wallet.address,
-    });
-  }
-
-  const calls = await builder.calls();
   const { feeMode, feeEstimate, preflight } = await resolveExecutionMode(wallet, calls);
+  const sweepAmountBase = options?.sweepRemainderToTreasury ?? true
+    ? availableConfidentialBalance > totalConfidentialAmount
+      ? availableConfidentialBalance - totalConfidentialAmount
+      : 0n
+    : 0n;
 
   return {
     calls,
@@ -391,19 +409,95 @@ export async function executePayrollExecution(
   options?: { sweepRemainderToTreasury?: boolean }
 ): Promise<PayrollExecutionResult> {
   const prepared = await preparePayrollExecution(wallet, lmk, items, options);
-  const tx = await wallet.execute(prepared.calls, { feeMode: prepared.feeMode });
+  const payrollToken = prepared.payrollToken;
+  const confidential = createCompanyConfidential(wallet, lmk);
+  const transactions: Array<Record<string, unknown>> = [];
 
-  await tx.wait({
-    successStates: [TransactionFinalityStatus.ACCEPTED_ON_L2],
-  });
+  let state = await confidential.getState();
+  if (state.pending > 0n) {
+    const rolloverCalls = await confidential.rollover({ sender: wallet.address });
+    const rolloverTx = await executeCalls(wallet, rolloverCalls);
+    transactions.push({
+      step: "rollover",
+      txHash: rolloverTx.txHash,
+      explorerUrl: rolloverTx.explorerUrl,
+      feeMode: rolloverTx.feeMode,
+      receipt: rolloverTx.receipt,
+    });
+    state = await confidential.getState();
+  }
 
-  const receipt = await tx.receipt();
+  const payrollAmounts = items.map((item) => Amount.parse(item.amount, payrollToken));
+  const confidentialAmounts = await Promise.all(
+    payrollAmounts.map((amount) => confidential.toConfidentialUnits(amount))
+  );
+  const totalConfidentialAmount = confidentialAmounts.reduce((sum, amount) => sum + amount, 0n);
+
+  if (state.balance < totalConfidentialAmount) {
+    const fundCalls = await confidential.fund({
+      amount: Amount.fromRaw(totalConfidentialAmount - state.balance, 0, payrollToken.symbol),
+      sender: wallet.address,
+    });
+    const fundTx = await executeCalls(wallet, fundCalls);
+    transactions.push({
+      step: "fund",
+      txHash: fundTx.txHash,
+      explorerUrl: fundTx.explorerUrl,
+      feeMode: fundTx.feeMode,
+      receipt: fundTx.receipt,
+    });
+    state = await confidential.getState();
+  }
+
+  for (const [index, item] of items.entries()) {
+    const transferCalls = await confidential.transfer({
+      amount: Amount.fromRaw(confidentialAmounts[index], 0, payrollToken.symbol),
+      to: deserializeRecipient(item.tongoRecipient),
+      sender: wallet.address,
+    });
+    const transferTx = await executeCalls(wallet, transferCalls);
+    transactions.push({
+      step: "transfer",
+      employeeId: item.employeeId,
+      name: item.name,
+      txHash: transferTx.txHash,
+      explorerUrl: transferTx.explorerUrl,
+      feeMode: transferTx.feeMode,
+      receipt: transferTx.receipt,
+    });
+    state = await confidential.getState();
+  }
+
+  if ((options?.sweepRemainderToTreasury ?? true) && state.balance > 0n) {
+    const withdrawCalls = await confidential.withdraw({
+      amount: Amount.fromRaw(state.balance, 0, payrollToken.symbol),
+      to: wallet.address,
+      sender: wallet.address,
+    });
+    const withdrawTx = await executeCalls(wallet, withdrawCalls);
+    transactions.push({
+      step: "sweep",
+      txHash: withdrawTx.txHash,
+      explorerUrl: withdrawTx.explorerUrl,
+      feeMode: withdrawTx.feeMode,
+      receipt: withdrawTx.receipt,
+    });
+  }
+
+  const lastTransaction = transactions[transactions.length - 1] as
+    | {
+        txHash?: string;
+        explorerUrl?: string;
+      }
+    | undefined;
 
   return {
-    txHash: tx.hash,
-    explorerUrl: tx.explorerUrl,
+    txHash: lastTransaction?.txHash || "",
+    explorerUrl: lastTransaction?.explorerUrl || "",
     feeMode: prepared.feeMode,
     preview: prepared.preview,
-    receipt: receipt as Record<string, unknown>,
+    receipt: {
+      transactions,
+    },
   };
 }

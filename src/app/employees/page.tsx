@@ -86,15 +86,7 @@ export default function EmployeesPage() {
       .substring(0, 2);
   };
 
-  // Format salary
-  const formatSalary = (salary: string) => {
-    const num = parseFloat(salary);
-    if (isNaN(num)) return `$${salary}`;
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(num);
-  };
+  const formatPayrollAmount = (amount: string, tokenSymbol: string) => `${amount} ${tokenSymbol}`;
 
   // Distinct count of departments
   const departmentCount = new Set(employees.map(e => e.department)).size || 1;
@@ -309,7 +301,7 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <p className="font-headline font-bold text-on-surface">
-                        {formatSalary(emp.salary)}
+                        {formatPayrollAmount(emp.salary, emp.tokenSymbol)}
                       </p>
                     </td>
                     <td className="px-6 py-4 text-right">

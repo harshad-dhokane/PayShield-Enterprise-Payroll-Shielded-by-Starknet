@@ -67,6 +67,10 @@ function formatFeeEstimate(preview: PayrollExecutionPreview) {
   return Amount.fromRaw(preview.feeEstimate.overall_fee, 18, preview.feeEstimate.unit).toFormatted(true);
 }
 
+function formatTokenAmount(amount: string | number, tokenSymbol: string) {
+  return `${amount} ${tokenSymbol}`;
+}
+
 export default function BatchPayrollPage() {
   const payrollToken = getConfidentialPayrollToken();
   const [payrollItems, setPayrollItems] = useState<PayrollBatchItem[]>([]);
@@ -444,7 +448,9 @@ export default function BatchPayrollPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="font-bold text-sm text-on-surface">${employee.salary}</p>
+                              <p className="font-bold text-sm text-on-surface">
+                                {formatTokenAmount(employee.salary, employee.tokenSymbol)}
+                              </p>
                               <p className="text-[10px] font-bold uppercase tracking-widest text-secondary text-right">
                                 {employee.tokenSymbol}
                               </p>
@@ -530,7 +536,7 @@ export default function BatchPayrollPage() {
                         {row.tongoAddress}
                       </td>
                       <td className="py-4 px-6 text-right text-on-surface font-black font-headline">
-                        ${row.amount}
+                        {formatTokenAmount(row.amount, row.tokenSymbol)}
                       </td>
                       <td className="py-4 px-6 text-right">
                         <span className="inline-flex items-center px-2 py-1 rounded border border-secondary border-opacity-30 bg-secondary/10 text-secondary text-[10px] font-black uppercase tracking-wider">
@@ -559,17 +565,17 @@ export default function BatchPayrollPage() {
                     Total Liquidity Required
                   </span>
                   <span className="text-on-surface font-black font-headline text-2xl">
-                    $
                     {payrollItems
                       .reduce((sum, row) => sum + Number(row.amount || 0), 0)
-                      .toLocaleString()}
+                      .toLocaleString()}{" "}
+                    {payrollItems[0]?.tokenSymbol || payrollToken?.symbol || "STRK"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-6 p-4 bg-secondary/10 border border-secondary/30 rounded-lg text-xs font-bold text-secondary">
                   <AlertCircle className="w-5 h-5 flex-shrink-0" />
                   <span>
-                    The company confidential account will fund, transfer, and optionally sweep any
-                    remainder in one PayShield execution path.
+                    Payroll settles through sequential confidential steps: rollover if needed,
+                    optional fund from the public wallet, then per-recipient transfers.
                   </span>
                 </div>
               </div>
@@ -702,10 +708,10 @@ export default function BatchPayrollPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold">
-                        $
                         {batch.items
                           .reduce((acc, item) => acc + Number(item.amount), 0)
-                          .toLocaleString()}
+                          .toLocaleString()}{" "}
+                        {batch.items[0]?.tokenSymbol || batch.payrollToken || "STRK"}
                       </p>
                       <p
                         className={`text-[10px] font-bold ${batch.status === "confirmed"
@@ -774,10 +780,10 @@ export default function BatchPayrollPage() {
                         Total Payload
                       </p>
                       <p className="font-bold text-sm text-on-surface">
-                        $
                         {selectedReceipt.items
                           .reduce((acc, item) => acc + Number(item.amount), 0)
-                          .toLocaleString()}
+                          .toLocaleString()}{" "}
+                        {selectedReceipt.items[0]?.tokenSymbol || selectedReceipt.payrollToken || "STRK"}
                       </p>
                     </div>
                   </div>
@@ -807,7 +813,7 @@ export default function BatchPayrollPage() {
                               </p>
                             </td>
                             <td className="py-3 px-4 text-right font-black font-headline text-on-surface">
-                              ${item.amount}
+                              {formatTokenAmount(item.amount, item.tokenSymbol)}
                             </td>
                           </tr>
                         ))}

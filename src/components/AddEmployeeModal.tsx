@@ -160,13 +160,13 @@ export default function AddEmployeeModal({
             
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                Monthly Salary (USD)
+                Payroll Amount
               </label>
               <input
                 type="text"
                 value={salary}
                 onChange={(e) => setSalary(e.target.value)}
-                placeholder="e.g. 12500"
+                placeholder={`e.g. 10 ${tokenSymbol}`}
                 className="w-full bg-surface-container-highest/50 border border-outline-variant/10 rounded-md px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:ring-1 focus:ring-primary-container/30 focus:border-primary-container/30"
               />
             </div>

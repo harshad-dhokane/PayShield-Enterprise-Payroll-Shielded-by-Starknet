@@ -16,15 +16,7 @@ export default function EmployeeDetailModal({
 }: EmployeeDetailModalProps) {
   if (!isOpen || !employee) return null;
 
-  // Format salary
-  const formatSalary = (salary: string) => {
-    const num = parseFloat(salary);
-    if (isNaN(num)) return `$${salary}`;
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(num);
-  };
+  const formatPayrollAmount = (amount: string, tokenSymbol: string) => `${amount} ${tokenSymbol}`;
 
   const getInitials = (name: string) => {
     return name
@@ -98,8 +90,10 @@ export default function EmployeeDetailModal({
 
                 <div className="space-y-4 relative z-10">
                    <div>
-                      <p className="text-on-surface-variant/50 text-[10px] font-bold uppercase tracking-widest mb-1">Monthly Salary (USD)</p>
-                      <p className="text-2xl font-black font-headline text-on-surface tracking-tight">{formatSalary(employee.salary)}</p>
+                      <p className="text-on-surface-variant/50 text-[10px] font-bold uppercase tracking-widest mb-1">Payroll Amount</p>
+                      <p className="text-2xl font-black font-headline text-on-surface tracking-tight">
+                        {formatPayrollAmount(employee.salary, employee.tokenSymbol)}
+                      </p>
                    </div>
                    <div>
                       <p className="text-on-surface-variant/50 text-[10px] font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
