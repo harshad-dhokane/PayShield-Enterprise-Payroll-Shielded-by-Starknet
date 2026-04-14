@@ -36,6 +36,12 @@ interface PreparedPayrollExecution {
   preview: PayrollExecutionPreview;
 }
 
+interface TongoContractIntrospection {
+  Tongo: {
+    ERC20(): Promise<string | bigint>;
+  };
+}
+
 // Stark curve subgroup order expected by Tongo key utilities.
 const TONGO_PRIVATE_KEY_ORDER =
   3618502788666131213697322783095070105526743751716087489154079457884512865583n;
@@ -161,6 +167,27 @@ async function resolveExecutionMode(
   }
 
   throw new Error(lastPreflight.reason);
+}
+
+function normalizeStarknetAddress(value: string | bigint): string {
+  return `0x${BigInt(value).toString(16)}`.toLowerCase();
+}
+
+async function assertConfiguredTongoToken(
+  confidential: TongoConfidential,
+  payrollToken: Token
+): Promise<void> {
+  const tongoAccount = confidential.getTongoAccount() as unknown as TongoContractIntrospection;
+  const configuredContract = getConfiguredTongoContract();
+
+  const wrappedTokenAddress = normalizeStarknetAddress(await tongoAccount.Tongo.ERC20());
+  const expectedTokenAddress = payrollToken.address.toLowerCase();
+
+  if (wrappedTokenAddress !== expectedTokenAddress) {
+    throw new Error(
+      `Configured Tongo contract ${configuredContract ?? "unknown"} wraps ${wrappedTokenAddress}, but payroll is configured for ${payrollToken.symbol} (${expectedTokenAddress}). Update NEXT_PUBLIC_TONGO_CONTRACT or NEXT_PUBLIC_TONGO_PAYROLL_TOKEN_SYMBOL so they point to the same Tongo instance.`
+    );
+  }
 }
 
 export function serializeRecipient(recipient: ConfidentialRecipient): SerializedRecipient {
@@ -304,6 +331,7 @@ export async function getCompanyConfidentialState(wallet: WalletInterface, lmk: 
   }
 
   const confidential = createCompanyConfidential(wallet, lmk);
+  await assertConfiguredTongoToken(confidential, payrollToken);
   const state = await confidential.getState();
 
   return {
@@ -329,6 +357,7 @@ export async function preparePayrollExecution(
   }
 
   const confidential = createCompanyConfidential(wallet, lmk);
+  await assertConfiguredTongoToken(confidential, payrollToken);
   const confidentialState = await confidential.getState();
   const profile = getCompanyConfidentialProfile(wallet, lmk);
 
