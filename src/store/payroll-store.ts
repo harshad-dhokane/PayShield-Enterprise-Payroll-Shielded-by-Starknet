@@ -19,6 +19,7 @@ type DraftPayrollInput = {
   amount?: string;
   amount_encrypted?: string;
   employee_id?: string;
+  employeeId?: string;
   name?: string;
   email?: string;
   token?: string;
@@ -27,8 +28,10 @@ type DraftPayrollInput = {
   recipientInput?: string;
   tongo_id?: string;
   tongo_address?: string;
+  tongoAddress?: string;
   shielded_id?: string;
   tongo_recipient?: SerializedRecipient | null;
+  tongoRecipient?: SerializedRecipient | null;
   employee?: {
     tongo_recipient_id?: string;
     tongo_address?: string;
@@ -37,11 +40,14 @@ type DraftPayrollInput = {
 };
 
 function resolveDraftRecipient(item: DraftPayrollInput) {
-  if (item.tongo_recipient) {
-    const recipient = parseStoredRecipient(item.tongo_recipient, item.tongo_address || item.tongo_id);
+  if (item.tongo_recipient || item.tongoRecipient) {
+    const recipient = parseStoredRecipient(
+      item.tongo_recipient || item.tongoRecipient,
+      item.tongo_address || item.tongoAddress || item.tongo_id
+    );
     return {
       recipient,
-      address: item.tongo_address || recipientToAddress(recipient),
+      address: item.tongo_address || item.tongoAddress || recipientToAddress(recipient),
     };
   }
 
@@ -59,6 +65,7 @@ function resolveDraftRecipient(item: DraftPayrollInput) {
   const source =
     item.recipientInput ||
     item.tongo_address ||
+    item.tongoAddress ||
     item.tongo_id ||
     item.shielded_id ||
     item.employee?.tongo_address ||
