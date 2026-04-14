@@ -11,6 +11,7 @@ import {
   LogOut,
   Zap,
 } from "lucide-react";
+import { useWallet } from "@/context/WalletContext";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -22,6 +23,8 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { disconnect } = useWallet();
+  const supportActive = pathname === "/support";
 
   return (
     <aside className="h-screen w-64 fixed left-0 top-0 bg-surface-container-lowest flex flex-col py-8 shadow-[20px_0_40px_rgba(0,0,0,0.4)] z-[60] font-headline">
@@ -76,15 +79,19 @@ export default function Sidebar() {
 
       {/* Bottom Nav */}
       <div className="mt-auto border-t border-outline-variant/10 pt-6 flex flex-col gap-1">
-        <button
-          onClick={() => alert("PayShield 24/7 Enterprise Support Hub opening...")}
-          className="flex items-center gap-3 text-on-surface/50 px-6 py-3 hover:text-on-surface hover:bg-surface-container-low duration-300 ease-in-out transition-all w-full text-left"
+        <Link
+          href="/support"
+          className={`flex items-center gap-3 px-6 py-3 duration-300 ease-in-out transition-all ${
+            supportActive
+              ? "bg-gradient-to-r from-primary-container/10 to-transparent text-primary-container border-r-2 border-primary-container"
+              : "text-on-surface/50 hover:text-on-surface hover:bg-surface-container-low"
+          }`}
         >
           <HelpCircle className="w-5 h-5" />
           <span className="text-sm font-medium tracking-tight">Support</span>
-        </button>
+        </Link>
         <button
-          onClick={() => alert("Are you sure you want to completely sever your Cartridge connection? Continuing will erase your Local Master Key.")}
+          onClick={() => void disconnect()}
           className="flex items-center gap-3 text-on-surface/50 px-6 py-3 hover:text-on-surface hover:bg-surface-container-low duration-300 ease-in-out transition-all w-full text-left"
         >
           <LogOut className="w-5 h-5 text-error" />
