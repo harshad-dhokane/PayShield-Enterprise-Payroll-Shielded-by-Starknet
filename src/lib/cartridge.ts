@@ -1,14 +1,11 @@
 import Controller from "@cartridge/controller";
 import type { Signature, TypedData } from "starknet";
 
+import { getConfidentialPayrollToken } from "./starkzap-sdk";
+
 // We use the hex address for Mainnet/Sepolia
-const CARTRIDGE_CONFIG = {
-  rpc: "https://api.cartridge.gg/x/starknet/sepolia",
-  policies: [
-    {
-      target: process.env.NEXT_PUBLIC_TONGO_CONTRACT || "0x0",
-      method: "confidentialTransfer",
-    },
+const getCartridgeConfig = () => {
+  const policies = [
     {
       target: process.env.NEXT_PUBLIC_COMPANY_REGISTRY || "0x0",
       method: "register_company",
@@ -21,8 +18,30 @@ const CARTRIDGE_CONFIG = {
       target: process.env.NEXT_PUBLIC_COMPANY_REGISTRY || "0x0",
       method: "record_payroll",
     },
-  ],
-  theme: "starkzap",
+  ];
+
+  const tongoContract = process.env.NEXT_PUBLIC_TONGO_CONTRACT || "0x0";
+  const tongoMethods = ["fund", "transfer", "withdraw", "rollover", "ragequit"];
+  for (const method of tongoMethods) {
+    policies.push({
+      target: tongoContract,
+      method,
+    });
+  }
+
+  const payrollToken = getConfidentialPayrollToken();
+  if (payrollToken) {
+    policies.push({
+      target: payrollToken.address,
+      method: "approve",
+    });
+  }
+
+  return {
+    rpc: "https://api.cartridge.gg/x/starknet/sepolia",
+    policies,
+    theme: "starkzap",
+  };
 };
 
 interface CartridgeSessionAccount {
@@ -36,7 +55,7 @@ class CartridgeAuth {
   private account: CartridgeSessionAccount | null = null;
 
   constructor() {
-    this.controller = new Controller(CARTRIDGE_CONFIG);
+    this.controller = new Controller(getCartridgeConfig());
   }
 
   // Connect
